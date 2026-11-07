@@ -42,7 +42,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .cat{margin-bottom:12px}
 .cat div.r{display:flex;justify-content:space-between}
 .tabs{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom,0px)}
-.tabs button{flex:1;padding:12px 0;font-size:13px;color:var(--mut)}
+.tabs button{flex:1;padding:12px 0;font-size:12px;color:var(--mut)}
 .tabs button.on{color:var(--acc);font-weight:600}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:5}
 .modal.show{display:flex}
@@ -53,13 +53,14 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 input,select{width:100%;font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px}
 .empty{color:var(--mut);text-align:center;padding:12px}
 .cancel{width:100%;padding:10px;color:var(--mut)}
+.chk{font-size:18px;padding:0 6px 0 0}
 </style>
 </head>
 <body>
 <main>
 <h1><span id="title">📅 Календарь</span><button id="eye" title="Скрыть суммы">🙈</button></h1>
-<div class="card nav"><button id="prev">‹</button><span id="mon"></span><button id="next">›</button></div>
-<div class="card sum"><div><small>Доходы</small><b class="inc" id="sInc"></b></div><div><small>Расходы</small><b class="exp" id="sExp"></b></div><div><small>Баланс</small><b id="sBal"></b></div></div>
+<div class="card nav" id="navc"><button id="prev">‹</button><span id="mon"></span><button id="next">›</button></div>
+<div class="card sum" id="sumc"><div><small>Доходы</small><b class="inc" id="sInc"></b></div><div><small>Расходы</small><b class="exp" id="sExp"></b></div><div><small>Баланс</small><b id="sBal"></b></div></div>
 <section id="vCal">
 <div class="card"><div class="grid" id="grid"></div></div>
 <div class="card"><b id="dTitle"></b><div id="dList"></div><button class="add" id="addBtn">+ Записать операцию</button></div>
@@ -68,8 +69,10 @@ input,select{width:100%;font:inherit;color:var(--tx);background:var(--bg);border
 <div class="card"><b>Расходы по категориям</b><div id="cats" style="margin-top:12px"></div></div>
 <div class="card"><b>Доходы по источникам</b><div id="incs" style="margin-top:12px"></div></div>
 </section>
+<section id="vPay" hidden><div class="card"><div id="pSum" style="margin-bottom:8px"></div><div id="pList"></div><button class="add" id="addPay">+ Добавить платёж</button></div></section>
+<section id="vWish" hidden><div class="card"><div id="wSum" style="margin-bottom:8px"></div><div id="wList"></div><button class="add" id="addWish">+ Добавить желание</button></div></section>
 </main>
-<div class="tabs"><button id="t1" class="on">📅 Календарь</button><button id="t2">📊 Итоги</button></div>
+<div class="tabs"><button id="t0" class="on">📅 Календарь</button><button id="t1">📌 Платежи</button><button id="t2">🎁 Вишлист</button><button id="t3">📊 Итоги</button></div>
 <div class="modal" id="modal"><div class="sheet">
 <div class="seg"><button id="bE" class="on e">➖ Расход</button><button id="bI" class="i">➕ Доход</button></div>
 <input id="amt" inputmode="text" placeholder="Сумма ₽ (можно 7+159)">
@@ -79,8 +82,15 @@ input,select{width:100%;font:inherit;color:var(--tx);background:var(--bg);border
 <button class="add" id="save">Сохранить</button>
 <button class="cancel" id="close">Закрыть</button>
 </div></div>
+<div class="modal" id="modal2"><div class="sheet"><b id="m2t"></b><div style="height:10px"></div>
+<input id="m2name" placeholder="Название">
+<input id="m2amt" inputmode="text" placeholder="Сумма ₽">
+<input id="m2day" inputmode="numeric" placeholder="День месяца (1-31)">
+<button class="add" id="m2save">Сохранить</button>
+<button class="cancel" id="m2close">Закрыть</button>
+</div></div>
 <script>
-const EXP=["🛒 Продукты","🚕 Транспорт","🏠 Жильё","🍔 Кафе","🎮 Развлечения","💊 Здоровье","👕 Одежда","📦 Другое"];
+const EXP=["🛒 Продукты","🚕 Транспорт","🏠 Жильё","🍔 Кафе","🎮 Развлечения","💊 Здоровье","👕 Одежда","📌 Обязательные","📦 Другое"];
 const INC=["💼 Зарплата","💻 Фриланс","🎁 Подарок","💰 Другое"];
 let ops=[],hide=false,type="exp";
 try{ops=JSON.parse(localStorage.getItem("fin_ops")||"[]")}catch(e){ops=[]}
@@ -103,14 +113,15 @@ function render(){
  for(let i=0;i<first;i++)h+="<div></div>";
  for(let d=1;d<=days;d++){
   const ds=m+"-"+pad(d),L=mo.filter(o=>o.date==ds);
-  const di=L.filter(o=>o.type=="inc").reduce((a,o)=>a+o.amt,0),de=L.filter(o=>o.type=="exp").reduce((a,o)=>a+o.amt,0);
-  h+=`<button class="day${ds==sel?" sel":""}${ds==today?" today":""}" data-d="${ds}"><span>${d}</span>${di?`<i class="inc">+${short(di)}</i>`:""}${de?`<i class="exp">−${short(de)}</i>`:""}</button>`;
+  const due=pays.some(p=>dueOf(p)==ds&&!paidOp(p)),di=L.filter(o=>o.type=="inc").reduce((a,o)=>a+o.amt,0),de=L.filter(o=>o.type=="exp").reduce((a,o)=>a+o.amt,0);
+  h+=`<button class="day${ds==sel?" sel":""}${ds==today?" today":""}" data-d="${ds}"><span>${d}</span>${di?`<i class="inc">+${short(di)}</i>`:""}${de?`<i class="exp">−${short(de)}</i>`:""}${due?"<i>⏰</i>":""}</button>`;
  }
  $("grid").innerHTML=h;
- const dl=ops.filter(o=>o.date==sel);
+ const dl=ops.filter(o=>o.date==sel),du=pays.filter(p=>dueOf(p)==sel&&!paidOp(p));
  $("dTitle").textContent=new Date(sel+"T00:00").toLocaleDateString("ru-RU",{day:"numeric",month:"long",weekday:"long"});
  $("dList").innerHTML=dl.length?dl.map(o=>`<div class="op"><div>${o.cat}${o.note?`<small>${esc(o.note)}</small>`:""}</div><div><b class="${o.type}">${o.type=="inc"?"+":"−"}${money(o.amt)}</b><button data-del="${o.id}">✕</button></div></div>`).join(""):'<div class="empty">Нет записей</div>';
- stats(mo);
+ $("dList").innerHTML+=du.map(p=>`<div class="op"><div>⏰ ${esc(p.name)}<small>Нужно оплатить</small></div><b>${money(p.amt)}</b></div>`).join("");
+ stats(mo);renderPay();renderWish();
 }
 const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function group(mo,t){const g={};mo.filter(o=>o.type==t).forEach(o=>g[o.cat]=(g[o.cat]||0)+o.amt);return Object.entries(g).sort((a,b)=>b[1]-a[1])}
@@ -119,6 +130,40 @@ function stats(mo){
   $(el).innerHTML=g.length?g.map(([c,v])=>`<div class="cat"><div class="r"><span>${c}</span><b>${money(v)}</b></div><div class="bar"><div style="width:${v/tot*100}%;${t=="inc"?"background:var(--inc)":""}"></div></div></div>`).join(""):'<div class="empty">Пока пусто</div>'};
  f("exp","cats");f("inc","incs");
 }
+let pays=[],wish=[],m2="pay";
+try{pays=JSON.parse(localStorage.getItem("fin_pay")||"[]");wish=JSON.parse(localStorage.getItem("fin_wish")||"[]")}catch(e){}
+const savePW=()=>{try{localStorage.setItem("fin_pay",JSON.stringify(pays));localStorage.setItem("fin_wish",JSON.stringify(wish))}catch(e){}};
+const num=v=>v.replace(/,/g,".").split("+").reduce((a,x)=>a+(parseFloat(x)||0),0);
+const dim=()=>new Date(cur.getFullYear(),cur.getMonth()+1,0).getDate();
+const dueOf=p=>ym()+"-"+pad(Math.min(p.day,dim()));
+const paidOp=p=>ops.find(o=>o.payId==p.id&&o.date.startsWith(ym()));
+function renderPay(){
+ const today=iso(new Date()),L=[...pays].sort((a,b)=>a.day-b.day);
+ const tot=L.reduce((a,p)=>a+p.amt,0),paid=L.filter(paidOp).reduce((a,p)=>a+p.amt,0);
+ $("pSum").innerHTML=`Всего ${money(tot)} · оплачено ${money(paid)} · осталось <b class="exp">${money(tot-paid)}</b>`;
+ $("pList").innerHTML=L.length?L.map(p=>{const d=dueOf(p),ok=paidOp(p),late=!ok&&d<today;
+  return `<div class="op"><div><button data-pay="${p.id}" class="chk">${ok?"✅":"⬜"}</button>${esc(p.name)}<small class="${late?"exp":""}">до ${+d.slice(8)} числа${late?" · просрочено":""}</small></div><div><b>${money(p.amt)}</b><button data-pdel="${p.id}">✕</button></div></div>`}).join(""):'<div class="empty">Добавьте аренду, кредит, интернет…</div>';
+}
+function renderWish(){
+ const L=[...wish].sort((a,b)=>(a.done?1:0)-(b.done?1:0)),t=wish.filter(w=>!w.done).reduce((a,w)=>a+w.amt,0);
+ $("wSum").innerHTML=`Осталось купить на <b>${money(t)}</b>`;
+ $("wList").innerHTML=L.length?L.map(w=>`<div class="op" style="${w.done?"opacity:.5":""}"><div><button data-wd="${w.id}" class="chk">${w.done?"✅":"⬜"}</button><span style="${w.done?"text-decoration:line-through":""}">${esc(w.name)}</span></div><div><b>${money(w.amt)}</b><button data-wdel="${w.id}">✕</button></div></div>`).join(""):'<div class="empty">Пока пусто: запишите, что хотите купить</div>';
+}
+function open2(t){m2=t;$("m2t").textContent=t=="pay"?"Новый обязательный платёж":"Новое желание";$("m2day").style.display=t=="pay"?"":"none";["m2name","m2amt","m2day"].forEach(i=>$(i).value="");$("modal2").classList.add("show");$("m2name").focus()}
+$("addPay").onclick=()=>open2("pay");$("addWish").onclick=()=>open2("wish");
+$("m2close").onclick=()=>$("modal2").classList.remove("show");
+$("m2save").onclick=()=>{const name=$("m2name").value.trim(),amt=num($("m2amt").value);if(!name||amt<=0)return;
+ if(m2=="pay")pays.push({id:Date.now(),name,amt,day:Math.min(31,Math.max(1,parseInt($("m2day").value)||1))});else wish.push({id:Date.now(),name,amt,done:false});
+ savePW();$("modal2").classList.remove("show");render()};
+$("pList").onclick=e=>{const b=e.target.closest("button");if(!b)return;
+ if(b.dataset.pdel)pays=pays.filter(p=>p.id!=b.dataset.pdel);
+ if(b.dataset.pay){const p=pays.find(x=>x.id==b.dataset.pay),o=paidOp(p);
+  if(o)ops=ops.filter(x=>x!==o);else ops.push({id:Date.now(),date:ym()==iso(new Date()).slice(0,7)?iso(new Date()):dueOf(p),type:"exp",amt:p.amt,cat:"📌 Обязательные",note:p.name,payId:p.id});save()}
+ savePW();render()};
+$("wList").onclick=e=>{const b=e.target.closest("button");if(!b)return;
+ if(b.dataset.wdel)wish=wish.filter(w=>w.id!=b.dataset.wdel);
+ if(b.dataset.wd){const w=wish.find(x=>x.id==b.dataset.wd);w.done=!w.done}
+ savePW();render()};
 function openM(){setType(type);$("date").value=sel;$("amt").value="";$("note").value="";$("modal").classList.add("show");setTimeout(()=>$("amt").focus(),50)}
 function setType(t){type=t;$("bE").className=t=="exp"?"on e":"";$("bI").className=t=="inc"?"on i":"";$("cat").innerHTML=(t=="exp"?EXP:INC).map(c=>`<option>${c}</option>`).join("")}
 $("bE").onclick=()=>setType("exp");$("bI").onclick=()=>setType("inc");
@@ -134,8 +179,9 @@ $("dList").onclick=e=>{const b=e.target.closest("[data-del]");if(b){ops=ops.filt
 $("prev").onclick=()=>{cur.setMonth(cur.getMonth()-1);render()};
 $("next").onclick=()=>{cur.setMonth(cur.getMonth()+1);render()};
 $("eye").onclick=()=>{hide=!hide;$("eye").textContent=hide?"👁":"🙈";render()};
-function tab(n){$("vCal").hidden=n!=1;$("vStat").hidden=n!=2;$("t1").className=n==1?"on":"";$("t2").className=n==2?"on":"";$("title").textContent=n==1?"📅 Календарь":"📊 Итоги"}
-$("t1").onclick=()=>tab(1);$("t2").onclick=()=>tab(2);
+const TABS=[["vCal","📅 Календарь"],["vPay","📌 Платежи"],["vWish","🎁 Вишлист"],["vStat","📊 Итоги"]];
+function tab(n){TABS.forEach((t,i)=>{$(t[0]).hidden=i!=n;$("t"+i).className=i==n?"on":""});$("title").textContent=TABS[n][1];$("navc").style.display=$("sumc").style.display=n==2?"none":""}
+TABS.forEach((t,i)=>$("t"+i).onclick=()=>tab(i));
 render();
 </script>
 </body>
